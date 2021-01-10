@@ -68,68 +68,99 @@ applyKernel(int dim, int i, int j, pixel *src, int kernelSize, int kernel[kernel
             bool filter) {
 
     int ii, jj;
-    int currRow, currCol;
     pixel_sum sum;
     pixel current_pixel;
     int min_intensity = 766; // arbitrary value that is higher than maximum possible intensity, which is 255*3=765
     int max_intensity = -1; // arbitrary value that is lower than minimum possible intensity, which is 0
     int min_row, min_col, max_row, max_col;
     pixel loop_pixel;
+    int pixel_loopSum;
 
-    initialize_pixel_sum(&sum);
-    int maxI = max(i - 1, 0), maxJ = max(j - 1, 0), minI = min(i + 1, dim - 1), minJ = min(j + 1, dim - 1);
-    for (ii = maxI; ii <= minI; ii++) {
-        int iin = ii * dim;
-        for (jj = maxJ; jj <= minJ; jj++) {
+    //initialize_pixel_sum(&sum);
+    sum.red = sum.green = sum.blue = 0;
+    int minI = min(i + 1, dim - 1), maxI = max(i - 1, 0), minJ = min(j + 1, dim - 1), maxJ = max(j - 1, 0);
+    ii = maxI;
+    int iin = ii * dim;
+    for (; ii <= minI; ii++) {
+        int kRow = ii - i + 1;
+        // compute row index in kernel
+        int kCol = maxJ - j + 1;
+        int weight = kernel[kRow][kCol], currentIdx = iin + maxJ;
+        // apply kernel on pixel at [ii,jj-jj+2]
+        sum.blue += src[currentIdx].blue * weight;
+        sum.red += src[currentIdx].red * weight;
+        sum.green += src[currentIdx].green * weight;
 
-            int kRow, kCol;
+        weight = kernel[kRow][kCol + 1];
+        sum.blue += src[currentIdx + 1].blue * weight;
+        sum.red += src[currentIdx + 1].red * weight;
+        sum.green += src[currentIdx + 1].green * weight;
 
-            // compute row index in kernel
-            if (ii < i) {
-                kRow = 0;
-            } else if (ii > i) {
-                kRow = 2;
-            } else {
-                kRow = 1;
-            }
-
-            // compute column index in kernel
-            if (jj < j) {
-                kCol = 0;
-            } else if (jj > j) {
-                kCol = 2;
-            } else {
-                kCol = 1;
-            }
-
-            // apply kernel on pixel at [ii,jj]
-            sum_pixels_by_weight(&sum, src[iin + jj], kernel[kRow][kCol]);
-        }
+        weight = kernel[kRow][kCol + 2];
+        sum.blue += src[currentIdx + 2].blue * weight;
+        sum.red += src[currentIdx + 2].red * weight;
+        sum.green += src[currentIdx + 2].green * weight;
+        iin+=dim;
     }
 
     if (filter) {
+        ii = maxI, iin = ii* dim, jj = maxJ;
         // find min and max coordinates
-        for (ii = maxI; ii <= minI; ii++) {
-            int iin = ii * dim;
-            for (jj = maxJ; jj <= minJ; jj++) {
+        for (; ii <= minI; ii++) {
+            //for (jj = maxJ; jj <= minJ; jj+=3) {
                 // check if smaller than min or higher than max and update
                 loop_pixel = src[iin + jj];
-                if ((((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue)) <= min_intensity) {
-                    min_intensity = (((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue));
+                pixel_loopSum = ((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue);
+                if (pixel_loopSum <= min_intensity) {
+                    min_intensity = pixel_loopSum;
                     min_row = ii;
                     min_col = jj;
                 }
-                if ((((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue)) > max_intensity) {
-                    max_intensity = (((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue));
+                if (pixel_loopSum > max_intensity) {
+                    max_intensity = pixel_loopSum;
                     max_row = ii;
                     max_col = jj;
                 }
-            }
+
+                loop_pixel = src[iin + jj+1];
+                pixel_loopSum = ((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue);
+                if (pixel_loopSum <= min_intensity) {
+                    min_intensity = pixel_loopSum;
+                    min_row = ii;
+                    min_col = jj+1;
+                }
+                if (pixel_loopSum > max_intensity) {
+                    max_intensity = pixel_loopSum;
+                    max_row = ii;
+                    max_col = jj+1;
+                }
+
+                loop_pixel = src[iin + jj+2];
+                pixel_loopSum = ((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue);
+                if (pixel_loopSum <= min_intensity) {
+                    min_intensity = pixel_loopSum;
+                    min_row = ii;
+                    min_col = jj+2;
+                }
+                if (pixel_loopSum > max_intensity) {
+                    max_intensity = pixel_loopSum;
+                    max_row = ii;
+                    max_col = jj+2;
+                }
+            //}
+            iin+=dim;
         }
+        int minIdx = min_row * dim + min_col, maxIdx = max_row * dim + max_col;
+        sum.blue -= src[minIdx].blue;
+        sum.red -= src[minIdx].red;
+        sum.green -= src[minIdx].green;
+
+        sum.blue -= src[maxIdx].blue;
+        sum.red -= src[maxIdx].red;
+        sum.green -= src[maxIdx].green;
         // filter out min and max
-        int currentIdx = min_row * dim + min_col;
-        sum_pixels_by_weight(&sum, src[currentIdx], -1);
-        sum_pixels_by_weight(&sum, src[currentIdx], -1);
+        //sum_pixels_by_weight(&sum, src[calcIndex(min_row, min_col, dim)], -1);
+        //sum_pixels_by_weight(&sum, src[calcIndex(max_row, max_col, dim)], -1);
     }
 
     // assign kernel's result to pixel at [i,j]
@@ -144,44 +175,73 @@ applyKernel(int dim, int i, int j, pixel *src, int kernelSize, int kernel[kernel
 */
 void smooth(int dim, pixel *src, pixel *dst, int kernelSize, int kernel[kernelSize][kernelSize], int kernelScale,
             bool filter) {
-
     int i, j;
-    int halfKernel = kernelSize / 2;
-    int dimMinKer = dim - halfKernel;
-    for (i = halfKernel; i < dimMinKer; i++) {
-        int in = i * dim;
-        //TODO loop unrolling
-        for (j = halfKernel; j < dimMinKer; j++) {
-            dst[in + j] = applyKernel(dim, i, j, src, kernelSize, kernel, kernelScale, filter);
+    for (i = kernelSize / 2; i < dim - kernelSize / 2; i++) {
+        int iDim = i * dim, limit = dim - kernelSize / 2 - 2;
+        for (j = kernelSize / 2; j < limit; j += 3) {
+            dst[iDim + j] = applyKernel(dim, i, j, src, kernelSize, kernel, kernelScale, filter);
+            dst[iDim + j + 1] = applyKernel(dim, i, (j + 1), src, kernelSize, kernel, kernelScale, filter);
+            dst[iDim + j + 2] = applyKernel(dim, i, (j + 2), src, kernelSize, kernel, kernelScale, filter);
+        }
+        for (; j < dim - kernelSize / 2; j++) {
+            dst[iDim + j] = applyKernel(dim, i, j, src, kernelSize, kernel, kernelScale, filter);
         }
     }
 }
 
-void charsToPixels(Image *charsImg, pixel *pixels) {
-    int row, col;
+void charsToPixels(pixel *pixels) {
 
+    int row, col, limit = n - 2;
     for (row = 0; row < m; row++) {
-        int rowN = row * n, threeRowN = 3 * rowN;
-        for (col = 0; col < n; col++) {
-            int currentIdx = rowN + col, threeCol = 3 * col;
-            pixels[currentIdx].red = image->data[threeRowN + threeCol];
-            pixels[currentIdx].green = image->data[threeRowN + threeCol + 1];
-            pixels[currentIdx].blue = image->data[threeRowN + threeCol + 2];
+        int rowN = row * n;
+        for (col = 0; col < limit; col += 3) {
+            int currentIdx = rowN + col, threeIdx = 3 * rowN + 3 * col;
+            pixels[currentIdx].red = image->data[threeIdx];
+            pixels[currentIdx].green = image->data[threeIdx + 1];
+            pixels[currentIdx].blue = image->data[threeIdx + 2];
+
+            pixels[currentIdx + 1].red = image->data[threeIdx + 3];
+            pixels[currentIdx + 1].green = image->data[threeIdx + 4];
+            pixels[currentIdx + 1].blue = image->data[threeIdx + 5];
+
+            pixels[currentIdx + 2].red = image->data[threeIdx + 6];
+            pixels[currentIdx + 2].green = image->data[threeIdx + 7];
+            pixels[currentIdx + 2].blue = image->data[threeIdx + 8];
+        }
+        for (; col < n; col++) {
+            int currentIdx = rowN + col, threeIdx = 3 * rowN + 3 * col;
+            pixels[currentIdx].red = image->data[threeIdx];
+            pixels[currentIdx].green = image->data[threeIdx + 1];
+            pixels[currentIdx].blue = image->data[threeIdx + 2];
         }
     }
 }
 
-void pixelsToChars(pixel *pixels, Image *charsImg) {
+void pixelsToChars(pixel *pixels) {
 
-    int row, col;
-
+    int row, col, limit = n - 2;
     for (row = 0; row < m; row++) {
-        int rowN = row * n, threeRowN = 3 * rowN;
-        for (col = 0; col < n; col++) {
-            int currentIdx = rowN + col, threeCol = 3 * col;
-            image->data[threeRowN + threeCol] = pixels[currentIdx].red;
-            image->data[threeRowN + threeCol + 1] = pixels[currentIdx].green;
-            image->data[threeRowN + threeCol + 2] = pixels[currentIdx].blue;
+        int rowN = row * n;
+        for (col = 0; col < limit; col += 3) {
+            int currentIdx = rowN + col, threeIdx = 3 * rowN + 3 * col;
+            image->data[threeIdx] = pixels[currentIdx].red;
+            image->data[threeIdx + 1] = pixels[currentIdx].green;
+            image->data[threeIdx + 2] = pixels[currentIdx].blue;
+
+            image->data[threeIdx + 3] = pixels[currentIdx + 1].red;
+            image->data[threeIdx + 4] = pixels[currentIdx + 1].green;
+            image->data[threeIdx + 5] = pixels[currentIdx + 1].blue;
+
+            image->data[threeIdx + 6] = pixels[currentIdx + 2].red;
+            image->data[threeIdx + 7] = pixels[currentIdx + 2].green;
+            image->data[threeIdx + 8] = pixels[currentIdx + 2].blue;
+        }
+        for (; col < n; col++) {
+            int currentIdx = rowN + col, threeIdx = 3 * rowN + 3 * col;
+            image->data[threeIdx] = pixels[currentIdx].red;
+            image->data[threeIdx + 1] = pixels[currentIdx].green;
+            image->data[threeIdx + 2] = pixels[currentIdx].blue;
+
         }
     }
 }
@@ -201,16 +261,16 @@ void copyPixels(pixel *src, pixel *dst) {
 }
 
 void doConvolution(Image *image, int kernelSize, int kernel[kernelSize][kernelSize], int kernelScale, bool filter) {
+    int mallocSize = m * n * sizeof(pixel);
+    pixel *pixelsImg = malloc(mallocSize);
+    pixel *backupOrg = malloc(mallocSize);
 
-    pixel *pixelsImg = malloc(m * n * sizeof(pixel));
-    pixel *backupOrg = malloc(m * n * sizeof(pixel));
-
-    charsToPixels(image, pixelsImg);
+    charsToPixels(pixelsImg);
     copyPixels(pixelsImg, backupOrg);
 
     smooth(m, backupOrg, pixelsImg, kernelSize, kernel, kernelScale, filter);
 
-    pixelsToChars(pixelsImg, image);
+    pixelsToChars(pixelsImg);
 
     free(pixelsImg);
     free(backupOrg);
