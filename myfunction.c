@@ -107,7 +107,6 @@ applyKernel(int dim, int i, int j, pixel *src, int kernelSize, int kernel[kernel
         ii = maxI, iin = ii* dim, jj = maxJ;
         // find min and max coordinates
         for (; ii <= minI; ii++) {
-            //for (jj = maxJ; jj <= minJ; jj+=3) {
                 // check if smaller than min or higher than max and update
                 loop_pixel = src[iin + jj];
                 pixel_loopSum = ((int) loop_pixel.red) + ((int) loop_pixel.green) + ((int) loop_pixel.blue);
@@ -147,9 +146,10 @@ applyKernel(int dim, int i, int j, pixel *src, int kernelSize, int kernel[kernel
                     max_row = ii;
                     max_col = jj+2;
                 }
-            //}
             iin+=dim;
         }
+
+        // filter out min and max
         int minIdx = min_row * dim + min_col, maxIdx = max_row * dim + max_col;
         sum.blue -= src[minIdx].blue;
         sum.red -= src[minIdx].red;
@@ -158,9 +158,7 @@ applyKernel(int dim, int i, int j, pixel *src, int kernelSize, int kernel[kernel
         sum.blue -= src[maxIdx].blue;
         sum.red -= src[maxIdx].red;
         sum.green -= src[maxIdx].green;
-        // filter out min and max
-        //sum_pixels_by_weight(&sum, src[calcIndex(min_row, min_col, dim)], -1);
-        //sum_pixels_by_weight(&sum, src[calcIndex(max_row, max_col, dim)], -1);
+
     }
 
     // assign kernel's result to pixel at [i,j]
